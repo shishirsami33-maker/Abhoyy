@@ -23,3 +23,4 @@ export const NAV_LINKS = [
   { href: "/pricing", labelKey: "nav.pricing" },
   { href: "/#faq", labelKey: "nav.faq" },
 ];
+

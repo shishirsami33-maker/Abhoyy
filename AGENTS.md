@@ -95,3 +95,4 @@ This task is front end only. There is no real backend yet. Build every screen wi
 - Do not store uploaded CVs or recordings anywhere persistent in this phase; keep them in memory or local preview only
 - Every screen must work at 360px width and at 1440px width
 - Run type checks, lint and a production build after each phase and fix every error before continuing
+

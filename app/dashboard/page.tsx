@@ -220,14 +220,19 @@ export default function DashboardPage() {
 
                     <div className="flex items-center gap-2 shrink-0">
                       {ses.status === 'completed' ? (
-                        <button
-                          onClick={handleComingSoon}
-                          className="px-3.5 py-1.5 rounded-lg border border-gray-200 text-xs font-bold text-gray-600 hover:text-ink-900 hover:bg-gray-50 transition-colors flex items-center gap-1.5 cursor-pointer"
-                          title="Report viewer coming in next phase"
-                        >
-                          <FileText className="w-3.5 h-3.5 text-violet-600" />
-                          <span>View Report</span>
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <Link href={`/interview/${ses.id}/report`}>
+                            <Button variant="secondary" size="sm" className="gap-1.5 text-xs">
+                              <FileText className="w-3.5 h-3.5 text-violet-600" />
+                              <span>View Report</span>
+                            </Button>
+                          </Link>
+                          <Link href={`/interview/${ses.id}/recording`}>
+                            <Button variant="ghost" size="sm" className="text-xs text-gray-500 hover:text-ink-900" title="Watch full recording">
+                              <Video className="w-3.5 h-3.5" />
+                            </Button>
+                          </Link>
+                        </div>
                       ) : ses.status === 'ready' || ses.status === 'prepared' ? (
                         <Link href={`/interview/${ses.id}/prepare`}>
                           <Button variant="primary" size="sm">
@@ -283,3 +288,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

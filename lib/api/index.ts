@@ -4,6 +4,8 @@ import {
   Payment,
   SessionStatus,
   PricingPlan,
+  SessionReport,
+  SessionRecording,
 } from '@/types';
 import { MOCK_FAILURES, FREE_FIRST_MOCK } from '@/config';
 
@@ -335,4 +337,198 @@ export const api = {
       ];
     },
   },
+
+  reports: {
+    async get(sessionId: string): Promise<SessionReport> {
+      await delay(400);
+      const session = await api.sessions.get(sessionId);
+      let target = 'Junior Software Engineer @ Pathao Ltd.';
+      if (session && 'jobTitle' in session.details) {
+        target = `${session.details.jobTitle} @ ${session.details.company}`;
+      } else if (session && 'cadre' in session.details) {
+        target = session.details.cadre || 'BCS Viva Examination';
+      } else if (session && 'subject' in session.details) {
+        target = `${session.details.subject} (${session.details.course})`;
+      }
+
+      return {
+        id: `rep_${sessionId}`,
+        sessionId,
+        candidateName: 'Tanvir Ahmed',
+        targetRole: target,
+        date: session?.createdAt || new Date().toISOString(),
+        overallDelivery: 'strong',
+        summaryQuote:
+          'Demonstrated calm articulation, structured STAR reasoning, and strong domain grounding. With 2 specific adjustments in metric quantification and filler pauses, you will stand out on any top panel.',
+        strengths: [
+          {
+            title: 'Structured STAR Framework Usage',
+            description:
+              'Seamlessly framed complex technical scenarios into Situation, Task, Action, and Result, making your problem-solving process transparent to the board.',
+          },
+          {
+            title: 'Balanced Speech Tempo',
+            description:
+              'Averaged a calm 128 words per minute, avoiding both rushed anxiety and halting pauses. Your vocal tone remained steady under follow-up probes.',
+          },
+          {
+            title: 'Courteous Board Presence',
+            description:
+              'Listened attentively to question stems without interrupting and took a deliberate 1-second pause to organize thoughts before answering.',
+          },
+        ],
+        priorityFixes: [
+          {
+            title: 'Quantify Project Outcomes With Exact Metrics',
+            description:
+              'In Question 3, you mentioned "the app ran much faster." Panels strongly favor specific numbers, such as "reduced Redis cache latency by 35% across 20,000 daily requests."',
+          },
+          {
+            title: 'Replace Verbal Fillers With Silent Breaths',
+            description:
+              'Under pressure in Question 4, you repeated "actually" and "mane" 7 times within 40 seconds. Embrace a silent 2-second pause instead of vocalizing hesitation.',
+          },
+        ],
+        flaggedMoments: [
+          {
+            id: 'flag_1',
+            timestamp: '02:14',
+            timeSeconds: 134,
+            title: 'Vague Outcome Quantification',
+            description:
+              'Mentioned "improved response speed" without stating benchmarks, query time differences, or user impact.',
+            type: 'vague',
+          },
+          {
+            id: 'flag_2',
+            timestamp: '05:40',
+            timeSeconds: 340,
+            title: 'High Filler-Word Density',
+            description:
+              'Used "actually" 4 times and "mane (মানে)" 3 times during the team conflict resolution response.',
+            type: 'filler',
+          },
+          {
+            id: 'flag_3',
+            timestamp: '08:12',
+            timeSeconds: 492,
+            title: 'Trailing-Off Conclusion',
+            description:
+              'Dropped vocal projection significantly at the end of the salary discussion instead of concluding with a confident summary.',
+            type: 'hesitation',
+          },
+        ],
+        metrics: {
+          wordsPerMinute: 128,
+          fillerWordsCount: 9,
+          topFillerWords: [
+            { word: 'actually', count: 4 },
+            { word: 'mane (মানে)', count: 3 },
+            { word: 'you know', count: 2 },
+          ],
+          clarityScore: 86,
+          structureScore: 89,
+        },
+        sampleAnswers: [
+          {
+            question: 'Tell me about a project on your CV that you are proud of.',
+            candidateAnswer:
+              'We had an app build with 4 people, it was really hard and we stayed up late and delivered.',
+            improvedAnswer:
+              'In my final year capstone project, our 4-person engineering team had 10 days to ship our React Native transport tracker. I designed the Redis caching architecture, instituted 15-minute daily standups, and delivered 24 hours ahead of schedule with 99.8% uptime across 50 simulated bus routes.',
+            reason:
+              'Highlights leadership, specific architecture role (Redis), timeline constraints, and concrete reliability metrics.',
+          },
+          {
+            question: 'Where do you see yourself in five years?',
+            candidateAnswer:
+              'I just want to learn everything and become a senior developer in a good company.',
+            improvedAnswer:
+              'In five years, I envision having deepened my distributed systems and cloud architecture expertise, actively mentoring junior engineers, and owning business-critical services that serve thousands of daily users in Bangladesh.',
+            reason:
+              'Demonstrates strategic technical focus, team mentorship values, and commitment to organizational impact.',
+          },
+        ],
+        historicalProgress: [
+          { sessionDate: '05 Nov', score: 68 },
+          { sessionDate: '08 Nov', score: 78 },
+          { sessionDate: '11 Nov', score: 86 },
+        ],
+      };
+    },
+  },
+
+  recordings: {
+    async get(sessionId: string): Promise<SessionRecording> {
+      await delay(400);
+      return {
+        id: `rec_${sessionId}`,
+        sessionId,
+        durationSeconds: 520,
+        transcript: [
+          {
+            timeSeconds: 0,
+            timestamp: '00:00',
+            speaker: 'interviewer',
+            text: 'Welcome to your Abhoyy board session. Please introduce yourself in about a minute.',
+          },
+          {
+            timeSeconds: 14,
+            timestamp: '00:14',
+            speaker: 'candidate',
+            text: 'Thank you for having me. My name is Tanvir Ahmed. I recently graduated with a degree in Computer Science and Engineering. Over the past two years, I focused on high-performance web applications and backend systems...',
+          },
+          {
+            timeSeconds: 65,
+            timestamp: '01:05',
+            speaker: 'interviewer',
+            text: 'Why did you choose this specific software engineering track?',
+          },
+          {
+            timeSeconds: 78,
+            timestamp: '01:18',
+            speaker: 'candidate',
+            text: 'I have always enjoyed dissecting complex systems into modular services. Seeing real users in Bangladesh depend on reliable digital services inspires me to build resilient infrastructure.',
+          },
+          {
+            timeSeconds: 134,
+            timestamp: '02:14',
+            speaker: 'candidate',
+            text: 'When we optimized the transit application database, we put in caching, and the app ran much faster for everyone.',
+            flagged: true,
+            flagTitle: 'Unquantified Project Result (Vague metrics)',
+          },
+          {
+            timeSeconds: 180,
+            timestamp: '03:00',
+            speaker: 'interviewer',
+            text: 'Describe a time you faced a difficult technical roadblock and how you resolved it.',
+          },
+          {
+            timeSeconds: 340,
+            timestamp: '05:40',
+            speaker: 'candidate',
+            text: 'Actually, mane, we had a debate about SQL vs NoSQL. Basically, my teammate wanted MongoDB, but actually our data was relational, so mane we had to sit together and compare schemas...',
+            flagged: true,
+            flagTitle: 'High Filler-Word Density (7 repetitions)',
+          },
+          {
+            timeSeconds: 420,
+            timestamp: '07:00',
+            speaker: 'interviewer',
+            text: 'Where do you see yourself in five years?',
+          },
+          {
+            timeSeconds: 492,
+            timestamp: '08:12',
+            speaker: 'candidate',
+            text: 'I just want to learn everything and become a senior engineer in a good company, or whatever the team needs...',
+            flagged: true,
+            flagTitle: 'Trailing-Off Conclusion (Weak close)',
+          },
+        ],
+      };
+    },
+  },
 };
+

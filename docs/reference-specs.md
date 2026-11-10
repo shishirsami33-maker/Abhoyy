@@ -286,3 +286,4 @@ See `locales/en.json` and `locales/bn.json` for full implementation matching the
 - JS weight: Landing page < ~200 KB gzipped
 - Accessibility: Lighthouse >= 95, no critical axe violations
 - Build health: No console errors, 0 hydration warnings, type check, lint & production build pass
+

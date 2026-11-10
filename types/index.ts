@@ -86,3 +86,58 @@ export interface InterviewQuestion {
   bn: string;
   expectedDurationSeconds?: number;
 }
+
+export interface FlaggedMoment {
+  id: string;
+  timestamp: string; // e.g. "02:14"
+  timeSeconds: number;
+  title: string;
+  description: string;
+  type: 'filler' | 'pacing' | 'hesitation' | 'vague';
+}
+
+export interface SampleAnswerRecommendation {
+  question: string;
+  candidateAnswer: string;
+  improvedAnswer: string;
+  reason: string;
+}
+
+export interface SessionReport {
+  id: string;
+  sessionId: string;
+  candidateName: string;
+  targetRole: string;
+  date: string;
+  overallDelivery: 'strong' | 'good' | 'needs_work';
+  summaryQuote: string;
+  strengths: { title: string; description: string }[];
+  priorityFixes: { title: string; description: string }[];
+  flaggedMoments: FlaggedMoment[];
+  metrics: {
+    wordsPerMinute: number;
+    fillerWordsCount: number;
+    topFillerWords: { word: string; count: number }[];
+    clarityScore: number;
+    structureScore: number;
+  };
+  sampleAnswers: SampleAnswerRecommendation[];
+  historicalProgress: { sessionDate: string; score: number }[];
+}
+
+export interface TranscriptEntry {
+  timeSeconds: number;
+  timestamp: string;
+  speaker: 'interviewer' | 'candidate';
+  text: string;
+  flagged?: boolean;
+  flagTitle?: string;
+}
+
+export interface SessionRecording {
+  id: string;
+  sessionId: string;
+  durationSeconds: number;
+  videoUrl?: string;
+  transcript: TranscriptEntry[];
+}

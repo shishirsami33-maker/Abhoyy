@@ -392,15 +392,34 @@ export default function LiveInterviewRoomPage() {
             </div>
           </div>
 
-          <Button
-            variant="volt"
-            size="lg"
-            onClick={() => router.push('/dashboard')}
-            className="w-full gap-2 font-black text-base"
-          >
-            <span>{t('room.backToDashboard')}</span>
-            <ArrowRight className="w-4 h-4" />
-          </Button>
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
+            <Button
+              variant="volt"
+              size="lg"
+              onClick={() => router.push(`/interview/${sessionId}/report`)}
+              className="w-full sm:flex-1 gap-2 font-black text-sm"
+            >
+              <span>View Diagnostic Report</span>
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={() => router.push(`/interview/${sessionId}/recording`)}
+              className="w-full sm:flex-1 gap-2 text-sm"
+            >
+              <span>Playback Recording</span>
+            </Button>
+          </div>
+
+          <div className="pt-4 text-center">
+            <button
+              onClick={() => router.push('/dashboard')}
+              className="text-xs text-gray-400 hover:text-paper underline"
+            >
+              {t('room.backToDashboard')}
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -720,3 +739,4 @@ export default function LiveInterviewRoomPage() {
     </div>
   );
 }
+

@@ -123,3 +123,4 @@ export function Logo({ variant = 'full', className = '', size = 'md' }: LogoProp
     </div>
   );
 }
+

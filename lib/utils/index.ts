@@ -36,3 +36,4 @@ export function formatDate(isoString: string, locale: 'en' | 'bn'): string {
     return isoString;
   }
 }
+
