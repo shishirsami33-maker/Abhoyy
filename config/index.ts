@@ -3,11 +3,20 @@ export const BRAND_NAME_BN = "অভয়";
 
 export const FREE_FIRST_MOCK = true;
 
-// Prices in BDT. Placeholder null shows as "৳ XX" until decided
-export const PRICES: { free: number; single: number | null; pack: number | null } = {
+// Re-export pricing & billing specifications
+export * from './pricing';
+
+// Backward-compatible price summary for components referencing legacy PRICES
+export const PRICES = {
   free: 0,
-  single: null,
-  pack: null,
+  single10: 79,
+  single15: 109,
+  single20: 139,
+  single: 109, // default 15 min recommended
+  starter: 219,
+  practice: 399,
+  careerBuilder: 599,
+  pack: 599, // default top package
 };
 
 export const BKASH_MERCHANT_NUMBER = "01800-ABHOYY"; // placeholder formatted merchant number

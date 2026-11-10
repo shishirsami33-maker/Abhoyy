@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -20,6 +20,10 @@ import {
   User,
   Target,
   Share2,
+  MessageSquare,
+  HelpCircle,
+  ShieldCheck,
+  Award,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -39,6 +43,7 @@ export default function SessionReportPage() {
 
   const [report, setReport] = useState<SessionReport | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   useEffect(() => {
     async function loadReport() {
@@ -62,7 +67,7 @@ export default function SessionReportPage() {
     }, 600);
   };
 
-  const handleShare = () => {
+  const handleCopyLink = () => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
       navigator.clipboard.writeText(window.location.href);
       toast('Private report link copied to clipboard.', 'success');
@@ -108,11 +113,21 @@ export default function SessionReportPage() {
           </Link>
 
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={handleShare} className="gap-1.5 text-xs">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowShareModal(true)}
+              className="gap-1.5 text-xs font-bold"
+            >
               <Share2 className="w-3.5 h-3.5" />
               <span>Share</span>
             </Button>
-            <Button variant="primary" size="sm" onClick={handleDownloadPdf} className="gap-1.5 text-xs">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleDownloadPdf}
+              className="gap-1.5 text-xs font-bold"
+            >
               <Download className="w-3.5 h-3.5" />
               <span>Download PDF</span>
             </Button>
@@ -144,14 +159,15 @@ export default function SessionReportPage() {
 
             {/* Overall Score Badge */}
             <div className="flex items-center gap-4 bg-ink-800 border border-gray-700/80 p-4 px-6 rounded-2xl shrink-0">
-              <div className="w-12 h-12 rounded-xl bg-success-600/20 text-success-500 flex items-center justify-center font-black">
-                <CheckCircle2 className="w-7 h-7" />
+              <div className="w-14 h-14 rounded-xl bg-volt-400 text-ink-900 flex flex-col items-center justify-center font-black">
+                <span className="text-xl leading-none">{report.overallScore || 86}%</span>
+                <span className="text-[9px] uppercase font-bold tracking-tight">Score</span>
               </div>
               <div>
                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
                   Board Verdict
                 </p>
-                <p className="text-lg font-black text-paper capitalize">
+                <p className="text-base sm:text-lg font-black text-paper capitalize">
                   {report.overallDelivery} Performance
                 </p>
               </div>
@@ -162,6 +178,93 @@ export default function SessionReportPage() {
             &ldquo;{report.summaryQuote}&rdquo;
           </div>
         </div>
+
+        {/* Section 5: Core Competencies (Communication, Confidence/Clarity, Relevance) */}
+        <section className="bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 shadow-card space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center font-bold">
+              <Award className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-ink-900">Core Performance Pillars</h2>
+              <p className="text-xs text-gray-500">Evaluation breakdown across critical panel dimensions.</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+            {/* Communication Skills */}
+            <div className="p-4 rounded-2xl bg-paper border border-gray-200 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    Communication Skills
+                  </span>
+                  <span className="font-mono font-black text-sm text-violet-600">
+                    {report.categories?.communicationSkills?.score ?? 88}%
+                  </span>
+                </div>
+                <div className="w-full h-1.5 bg-gray-200 rounded-full mb-3 overflow-hidden">
+                  <div
+                    className="h-full bg-violet-600 rounded-full"
+                    style={{ width: `${report.categories?.communicationSkills?.score ?? 88}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  {report.categories?.communicationSkills?.feedback ??
+                    'Crisp articulation with clear sentence endings. Excellent tonal pacing that avoids trailing off.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Confidence & Clarity */}
+            <div className="p-4 rounded-2xl bg-paper border border-gray-200 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    Confidence & Clarity
+                  </span>
+                  <span className="font-mono font-black text-sm text-volt-600 text-ink-900">
+                    {report.categories?.confidenceAndClarity?.score ?? 84}%
+                  </span>
+                </div>
+                <div className="w-full h-1.5 bg-gray-200 rounded-full mb-3 overflow-hidden">
+                  <div
+                    className="h-full bg-success-600 rounded-full"
+                    style={{ width: `${report.categories?.confidenceAndClarity?.score ?? 84}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  {report.categories?.confidenceAndClarity?.feedback ??
+                    'Maintained steady eye contact, took deliberate 1-second breath pauses before responding to tough probes.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Answer Relevance */}
+            <div className="p-4 rounded-2xl bg-paper border border-gray-200 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    Answer Relevance
+                  </span>
+                  <span className="font-mono font-black text-sm text-violet-600">
+                    {report.categories?.answerRelevance?.score ?? 89}%
+                  </span>
+                </div>
+                <div className="w-full h-1.5 bg-gray-200 rounded-full mb-3 overflow-hidden">
+                  <div
+                    className="h-full bg-violet-600 rounded-full"
+                    style={{ width: `${report.categories?.answerRelevance?.score ?? 89}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  {report.categories?.answerRelevance?.feedback ??
+                    'Directly addressed the core of situational questions using clear context and measurable engineering outcomes.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* Performance Metric Tiles */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -181,7 +284,7 @@ export default function SessionReportPage() {
               {locale === 'bn' ? toBanglaDigits(report.metrics.fillerWordsCount) : report.metrics.fillerWordsCount}
             </span>
             <span className="text-[11px] text-gray-400 font-semibold block mt-1">
-              Across 8 answers
+              Across answers
             </span>
           </div>
 
@@ -266,6 +369,64 @@ export default function SessionReportPage() {
           </div>
         </section>
 
+        {/* Section 5: Specific Recommendations */}
+        <section className="bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 shadow-card space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-lg bg-volt-400 text-ink-900 flex items-center justify-center font-black">
+              <Lightbulb className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-ink-900">Specific Recommendations</h2>
+              <p className="text-xs text-gray-500">Actionable techniques to apply immediately in your next practice session.</p>
+            </div>
+          </div>
+
+          <div className="space-y-2.5 pt-2">
+            {(
+              report.specificRecommendations || [
+                'Practice 2-minute timed responses to avoid over-explaining background context.',
+                'State the business impact or user scale in your very first sentence.',
+                'When asked about weaknesses, immediately pair your answer with a recent learning action.',
+              ]
+            ).map((rec, idx) => (
+              <div key={idx} className="p-3.5 rounded-xl bg-paper border border-gray-200 text-xs sm:text-sm text-gray-800 flex items-start gap-3">
+                <span className="w-5 h-5 rounded-full bg-violet-600 text-paper font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">
+                  {idx + 1}
+                </span>
+                <p className="leading-relaxed">{rec}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Section 5: Suggested Practice Questions */}
+        <section className="bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 shadow-card space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center font-bold">
+              <MessageSquare className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-ink-900">Suggested Practice Questions</h2>
+              <p className="text-xs text-gray-500">Follow-up board scenarios to rehearse before your real interview.</p>
+            </div>
+          </div>
+
+          <div className="space-y-2.5 pt-2">
+            {(
+              report.suggestedPracticeQuestions || [
+                'Can you walk us through a time an architectural decision you advocated for failed in production?',
+                'How would you prioritize three urgent production bug tickets when the engineering manager is unavailable?',
+                'Explain how you ensure secure data handling when integrating third-party payment gateways like bKash.',
+              ]
+            ).map((q, idx) => (
+              <div key={idx} className="p-4 rounded-xl bg-violet-50/60 border border-violet-100 text-xs sm:text-sm text-ink-900 font-medium flex items-start gap-3">
+                <span className="text-violet-600 font-bold shrink-0">Q{idx + 1}:</span>
+                <p className="leading-relaxed italic">&ldquo;{q}&rdquo;</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
         {/* Flagged Moments with Timestamps & Recording Jump Links */}
         <section className="bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 shadow-card space-y-4">
           <div className="flex items-center justify-between">
@@ -318,25 +479,27 @@ export default function SessionReportPage() {
         <section className="bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 shadow-card space-y-6">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-volt-400 text-ink-900 flex items-center justify-center font-bold">
-              <Lightbulb className="w-5 h-5" />
+              <Sparkles className="w-5 h-5 text-ink-900" />
             </div>
             <div>
-              <h2 className="text-xl font-black text-ink-900">Stronger Sample Answers</h2>
-              <p className="text-xs text-gray-500">Concrete rephrasing based on your original spoken responses.</p>
+              <h2 className="text-xl font-black text-ink-900">Stronger Recommended Answers</h2>
+              <p className="text-xs text-gray-500">Side-by-side comparison with strategic phrasing upgrades.</p>
             </div>
           </div>
 
           <div className="space-y-6">
             {report.sampleAnswers.map((item, idx) => (
-              <div key={idx} className="p-5 rounded-2xl bg-paper border border-gray-200 space-y-3">
-                <p className="text-xs font-mono font-bold uppercase tracking-wider text-gray-500">
-                  Question:
-                </p>
-                <h3 className="text-sm sm:text-base font-bold text-ink-900">{item.question}</h3>
+              <div
+                key={idx}
+                className="p-5 sm:p-6 rounded-2xl bg-paper border border-gray-200 space-y-4"
+              >
+                <h3 className="text-sm sm:text-base font-bold text-ink-900">
+                  Question: &ldquo;{item.question}&rdquo;
+                </h3>
 
-                <div className="p-3.5 rounded-xl bg-white border border-gray-200">
+                <div className="p-4 rounded-xl bg-white border border-gray-200">
                   <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
-                    Your Response (Recorded):
+                    Your Response During Viva:
                   </span>
                   <p className="text-xs sm:text-sm text-gray-600 italic leading-relaxed">
                     &ldquo;{item.candidateAnswer}&rdquo;
@@ -389,9 +552,9 @@ export default function SessionReportPage() {
         {/* Action Band: Watch Recording or Dashboard */}
         <div className="rounded-3xl bg-ink-900 text-paper p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lifted">
           <div>
-            <h3 className="text-lg font-bold text-paper">Want to review your full video and audio?</h3>
+            <h3 className="text-lg font-bold text-paper">Permanent Feedback Record</h3>
             <p className="text-xs sm:text-sm text-gray-300">
-              Watch full recording with real-time synchronized transcript and jump directly to flagged moments.
+              This report remains permanently saved in your dashboard even if your optional video recording is deleted.
             </p>
           </div>
 
@@ -399,13 +562,72 @@ export default function SessionReportPage() {
             <Link href={`/interview/${sessionId}/recording`}>
               <Button variant="volt" size="md" className="gap-2 font-black">
                 <Video className="w-4 h-4" />
-                <span>Play Recording</span>
+                <span>Recording & Transcript</span>
               </Button>
             </Link>
           </div>
         </div>
       </div>
+
+      {/* Share Progress Modal */}
+      <AnimatePresence>
+        {showShareModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/70 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl border border-gray-200 p-6 sm:p-8 max-w-md w-full shadow-2xl text-center space-y-4"
+            >
+              <div className="w-14 h-14 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center mx-auto">
+                <Share2 className="w-7 h-7" />
+              </div>
+
+              <h3 className="text-xl font-black text-ink-900">
+                Share Your Viva Milestone
+              </h3>
+
+              <div className="p-4 rounded-2xl bg-ink-900 text-paper text-left space-y-2">
+                <div className="flex justify-between items-center text-xs text-volt-400 font-mono font-bold">
+                  <span>Abhoyy AI Assessment</span>
+                  <span>{report.overallScore || 86}% Score</span>
+                </div>
+                <p className="text-sm font-bold text-paper">{report.targetRole}</p>
+                <p className="text-xs text-gray-400">
+                  Candidate: {report.candidateName} • Board: {report.overallDelivery.toUpperCase()}
+                </p>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(
+                    `I just practiced my oral mock viva on Abhoyy and scored ${report.overallScore || 86}% for ${report.targetRole}! Practice fearlessly at https://abhoyy.com`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full py-2.5 px-4 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 transition-colors"
+                >
+                  Share on WhatsApp
+                </a>
+
+                <Button variant="secondary" size="md" onClick={handleCopyLink} className="w-full text-xs font-bold">
+                  Copy Report Link
+                </Button>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowShareModal(false)}
+                  className="text-xs text-gray-500 hover:text-ink-900 font-semibold"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
-

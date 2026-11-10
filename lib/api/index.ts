@@ -6,26 +6,73 @@ import {
   PricingPlan,
   SessionReport,
   SessionRecording,
+  MinuteLedgerEntry,
 } from '@/types';
-import { MOCK_FAILURES, FREE_FIRST_MOCK } from '@/config';
+import {
+  MOCK_FAILURES,
+  FREE_FIRST_MOCK,
+  INDIVIDUAL_MOCK_PRICES,
+  MINUTE_PACKAGES,
+  PURCHASED_MINUTES_EXPIRY_DAYS,
+  RECORDING_RETENTION_DAYS,
+} from '@/config';
 
-const delay = (ms: number = Math.floor(Math.random() * 400 + 400)) =>
+const delay = (ms: number = Math.floor(Math.random() * 300 + 300)) =>
   new Promise((res) => setTimeout(res, ms));
 
 const USER_STORAGE_KEY = 'abhoyy:user';
 const SESSIONS_STORAGE_KEY = 'abhoyy:sessions';
 const PAYMENTS_STORAGE_KEY = 'abhoyy:payments';
+const LEDGER_STORAGE_KEY = 'abhoyy:ledger';
+const RECORDINGS_STORAGE_KEY = 'abhoyy:recordings';
 
-// Initial default user if not in storage
+// Initial default user with 30 minutes Starter pack
 const defaultMockUser: User = {
   id: 'usr_mock_1',
   name: 'Tanvir Ahmed',
   phone: '01712345678',
   email: 'tanvir.ahmed@example.com',
-  credits: 1, // 1 free credit initially
-  freeMockUsed: false,
+  minutesBalance: 30, // 30 minutes in wallet
+  credits: 30, // backward-compatible alias
+  freeMockEligible: false, // first mock already used in history
+  freeMockUsed: true,
+  minutesExpiresAt: new Date(Date.now() + PURCHASED_MINUTES_EXPIRY_DAYS * 86400000).toISOString(),
   locale: 'en',
 };
+
+// Initial mock ledger
+const defaultMockLedger: MinuteLedgerEntry[] = [
+  {
+    id: 'led_init_free',
+    userId: 'usr_mock_1',
+    type: 'free_grant',
+    minutesChange: 5,
+    balanceAfter: 5,
+    reason: 'Welcome bonus: 5-minute free first mock viva',
+    createdAt: new Date(Date.now() - 86400000 * 10).toISOString(),
+  },
+  {
+    id: 'led_use_free',
+    userId: 'usr_mock_1',
+    type: 'session_deduction',
+    minutesChange: -5,
+    balanceAfter: 0,
+    sessionId: 'ses_mock_free',
+    reason: 'Live session deduction: 5-minute Free Mock',
+    createdAt: new Date(Date.now() - 86400000 * 9).toISOString(),
+  },
+  {
+    id: 'led_starter_pack',
+    userId: 'usr_mock_1',
+    type: 'package_purchase',
+    minutesChange: 30,
+    balanceAfter: 30,
+    paymentId: 'pay_mock_starter',
+    reason: 'Purchased Starter Package (30 minutes)',
+    expiresAt: new Date(Date.now() + PURCHASED_MINUTES_EXPIRY_DAYS * 86400000).toISOString(),
+    createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
+  },
+];
 
 // Initial mock sessions
 const defaultMockSessions: InterviewSession[] = [
@@ -42,11 +89,17 @@ const defaultMockSessions: InterviewSession[] = [
     language: 'mixed',
     panelStyle: 'standard',
     lengthMinutes: 15,
+    isFreeMock: false,
+    minutesDeducted: 15,
+    deductedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
     consent: {
       terms: true,
       recording: true,
       acceptedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
     },
+    recordingRequested: true,
+    recordingDownloadCount: 0,
+    recordingExpiresAt: new Date(Date.now() + RECORDING_RETENTION_DAYS * 86400000).toISOString(),
     status: 'completed',
     createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
   },
@@ -63,11 +116,16 @@ const defaultMockSessions: InterviewSession[] = [
     language: 'bn',
     panelStyle: 'tough',
     lengthMinutes: 20,
+    isFreeMock: false,
+    minutesDeducted: 20,
+    deductedAt: new Date(Date.now() - 86400000 * 5).toISOString(),
     consent: {
       terms: true,
-      recording: true,
+      recording: false,
       acceptedAt: new Date(Date.now() - 86400000 * 5).toISOString(),
     },
+    recordingRequested: false, // user opted out of recording
+    recordingDownloadCount: 0,
     status: 'completed',
     createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
   },
@@ -81,7 +139,13 @@ function getStoredUser(): User | null {
     return defaultMockUser;
   }
   try {
-    return JSON.parse(raw);
+    const u: User = JSON.parse(raw);
+    // Ensure minute balance field exists
+    if (typeof u.minutesBalance === 'undefined') {
+      u.minutesBalance = (u.credits ?? 1) * 15; // migrate legacy credit to minutes
+      u.credits = u.minutesBalance;
+    }
+    return u;
   } catch {
     return defaultMockUser;
   }
@@ -92,6 +156,8 @@ function setStoredUser(user: User | null) {
   if (!user) {
     localStorage.removeItem(USER_STORAGE_KEY);
   } else {
+    // Keep credits in sync for backward compatibility
+    user.credits = user.minutesBalance;
     localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
   }
 }
@@ -115,16 +181,35 @@ function setStoredSessions(sessions: InterviewSession[]) {
   localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions));
 }
 
+function getStoredLedger(): MinuteLedgerEntry[] {
+  if (typeof window === 'undefined') return defaultMockLedger;
+  const raw = localStorage.getItem(LEDGER_STORAGE_KEY);
+  if (!raw) {
+    localStorage.setItem(LEDGER_STORAGE_KEY, JSON.stringify(defaultMockLedger));
+    return defaultMockLedger;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return defaultMockLedger;
+  }
+}
+
+function setStoredLedger(ledger: MinuteLedgerEntry[]) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(LEDGER_STORAGE_KEY, JSON.stringify(ledger));
+}
+
 export const api = {
   auth: {
     async getCurrentUser(): Promise<User | null> {
-      await delay(200);
+      await delay(150);
       return getStoredUser();
     },
 
     async sendOtp(phone: string): Promise<{ success: boolean; message: string }> {
-      await delay(600);
-      if (MOCK_FAILURES && Math.random() < 0.3) {
+      await delay(400);
+      if (MOCK_FAILURES && Math.random() < 0.2) {
         throw new Error('Failed to send OTP due to network delay. Please retry.');
       }
       return {
@@ -134,20 +219,36 @@ export const api = {
     },
 
     async verifyOtp(phone: string, code: string): Promise<{ user: User }> {
-      await delay(800);
+      await delay(500);
       if (code !== '123456') {
         throw new Error('Invalid OTP code. For this preview, use 123456.');
       }
       let user = getStoredUser();
+      const cleanPhone = phone.replace(/\D/g, '');
+
+      // Check if this phone has already claimed a free mock
+      const claimedPhones: string[] = JSON.parse(
+        (typeof window !== 'undefined' && localStorage.getItem('abhoyy:claimed_phones')) || '[]'
+      );
+      const isNewPhone = !claimedPhones.includes(cleanPhone);
+
       if (!user) {
         user = {
           id: `usr_${Date.now()}`,
           name: 'Practice Candidate',
           phone,
-          credits: FREE_FIRST_MOCK ? 1 : 0,
-          freeMockUsed: false,
+          minutesBalance: isNewPhone && FREE_FIRST_MOCK ? 5 : 0,
+          credits: isNewPhone && FREE_FIRST_MOCK ? 5 : 0,
+          freeMockEligible: isNewPhone && FREE_FIRST_MOCK,
+          freeMockUsed: !isNewPhone,
           locale: 'en',
         };
+        if (isNewPhone) {
+          claimedPhones.push(cleanPhone);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('abhoyy:claimed_phones', JSON.stringify(claimedPhones));
+          }
+        }
       } else {
         user.phone = phone;
       }
@@ -156,33 +257,200 @@ export const api = {
     },
 
     async logout(): Promise<void> {
-      await delay(300);
+      await delay(200);
       setStoredUser(null);
     },
   },
 
-  credits: {
-    async getBalance(): Promise<number> {
-      await delay(300);
+  // Minute-Based Wallet System & Auditable Ledger
+  wallet: {
+    async getBalance(): Promise<{
+      minutesBalance: number;
+      freeMockEligible: boolean;
+      freeMockUsed: boolean;
+      expiresAt?: string;
+    }> {
+      await delay(200);
       const user = getStoredUser();
-      return user ? user.credits : 0;
+      return {
+        minutesBalance: user?.minutesBalance ?? 0,
+        freeMockEligible: user?.freeMockEligible ?? false,
+        freeMockUsed: user?.freeMockUsed ?? true,
+        expiresAt: user?.minutesExpiresAt,
+      };
     },
 
-    async deductCredit(): Promise<number> {
-      await delay(400);
+    /**
+     * Deduct exact minutes only when entering live interview state.
+     * Guaranteed idempotent: will not deduct twice for the same sessionId.
+     */
+    async deductForLiveSession(
+      sessionId: string,
+      durationMinutes: 5 | 10 | 15 | 20
+    ): Promise<{ success: boolean; deducted: number; newBalance: number }> {
+      await delay(350);
       const user = getStoredUser();
-      if (!user || user.credits <= 0) {
-        throw new Error('Insufficient interview credits.');
+      if (!user) throw new Error('User not authenticated.');
+
+      const ledger = getStoredLedger();
+
+      // Idempotency check: verify if this session was already deducted
+      const existingDeduction = ledger.find(
+        (entry) => entry.sessionId === sessionId && entry.type === 'session_deduction'
+      );
+      if (existingDeduction) {
+        return {
+          success: true,
+          deducted: Math.abs(existingDeduction.minutesChange),
+          newBalance: user.minutesBalance,
+        };
       }
-      user.credits -= 1;
+
+      // Check free mock eligibility if 5 minutes
+      if (durationMinutes === 5) {
+        if (!user.freeMockEligible && user.minutesBalance < 5) {
+          throw new Error('Free mock interview has already been used on this verified account.');
+        }
+
+        if (user.freeMockEligible) {
+          user.freeMockEligible = false;
+          user.freeMockUsed = true;
+          // Free mock deduction
+          const newLedgerEntry: MinuteLedgerEntry = {
+            id: `led_ded_${Date.now()}`,
+            userId: user.id,
+            type: 'session_deduction',
+            minutesChange: -5,
+            balanceAfter: user.minutesBalance,
+            sessionId,
+            reason: 'Free 5-minute welcome mock viva session commenced',
+            createdAt: new Date().toISOString(),
+          };
+          setStoredLedger([newLedgerEntry, ...ledger]);
+          setStoredUser(user);
+
+          // Update session status
+          const sessions = getStoredSessions();
+          const sIdx = sessions.findIndex((s) => s.id === sessionId);
+          if (sIdx !== -1) {
+            sessions[sIdx].minutesDeducted = 5;
+            sessions[sIdx].deductedAt = new Date().toISOString();
+            sessions[sIdx].status = 'live';
+            setStoredSessions(sessions);
+          }
+
+          return { success: true, deducted: 5, newBalance: user.minutesBalance };
+        }
+      }
+
+      // Standard minute balance deduction
+      if (user.minutesBalance < durationMinutes) {
+        throw new Error(
+          `Insufficient minute balance. This session requires ${durationMinutes} minutes, but your balance has ${user.minutesBalance} minutes.`
+        );
+      }
+
+      user.minutesBalance -= durationMinutes;
+      user.credits = user.minutesBalance;
+
+      const newLedgerEntry: MinuteLedgerEntry = {
+        id: `led_ded_${Date.now()}`,
+        userId: user.id,
+        type: 'session_deduction',
+        minutesChange: -durationMinutes,
+        balanceAfter: user.minutesBalance,
+        sessionId,
+        reason: `Live session deduction: ${durationMinutes}-minute interview`,
+        createdAt: new Date().toISOString(),
+      };
+
+      setStoredLedger([newLedgerEntry, ...ledger]);
       setStoredUser(user);
-      return user.credits;
+
+      // Update session record
+      const sessions = getStoredSessions();
+      const sIdx = sessions.findIndex((s) => s.id === sessionId);
+      if (sIdx !== -1) {
+        sessions[sIdx].minutesDeducted = durationMinutes;
+        sessions[sIdx].deductedAt = new Date().toISOString();
+        sessions[sIdx].status = 'live';
+        setStoredSessions(sessions);
+      }
+
+      return {
+        success: true,
+        deducted: durationMinutes,
+        newBalance: user.minutesBalance,
+      };
+    },
+
+    /**
+     * Restore deducted minutes after verified technical failure
+     */
+    async restoreMinutesForFailure(
+      sessionId: string,
+      reason: string
+    ): Promise<{ success: boolean; restored: number; newBalance: number }> {
+      await delay(300);
+      const user = getStoredUser();
+      if (!user) throw new Error('User not authenticated.');
+
+      const sessions = getStoredSessions();
+      const session = sessions.find((s) => s.id === sessionId);
+      const minutesToRestore = session?.minutesDeducted || session?.lengthMinutes || 15;
+
+      user.minutesBalance += minutesToRestore;
+      user.credits = user.minutesBalance;
+
+      const ledger = getStoredLedger();
+      const refundEntry: MinuteLedgerEntry = {
+        id: `led_ref_${Date.now()}`,
+        userId: user.id,
+        type: 'refund_restoration',
+        minutesChange: minutesToRestore,
+        balanceAfter: user.minutesBalance,
+        sessionId,
+        reason: `Technical failure restoration: ${reason}`,
+        createdAt: new Date().toISOString(),
+      };
+
+      setStoredLedger([refundEntry, ...ledger]);
+      setStoredUser(user);
+
+      return {
+        success: true,
+        restored: minutesToRestore,
+        newBalance: user.minutesBalance,
+      };
+    },
+
+    async getLedger(): Promise<MinuteLedgerEntry[]> {
+      await delay(250);
+      return getStoredLedger();
+    },
+  },
+
+  // Legacy credits alias for backwards compatibility
+  credits: {
+    async getBalance(): Promise<number> {
+      const user = getStoredUser();
+      return user ? user.minutesBalance : 0;
+    },
+    async deductCredit(): Promise<number> {
+      const user = getStoredUser();
+      if (!user || user.minutesBalance <= 0) {
+        throw new Error('Insufficient interview minutes.');
+      }
+      user.minutesBalance = Math.max(0, user.minutesBalance - 15);
+      user.credits = user.minutesBalance;
+      setStoredUser(user);
+      return user.minutesBalance;
     },
   },
 
   uploads: {
     async uploadCv(file: File): Promise<{ fileName: string; size: number; mimeType: string }> {
-      await delay(900);
+      await delay(700);
       if (file.size > 5 * 1024 * 1024) {
         throw new Error('CV file size exceeds the 5 MB limit.');
       }
@@ -204,12 +472,12 @@ export const api = {
 
   sessions: {
     async list(): Promise<InterviewSession[]> {
-      await delay(400);
+      await delay(300);
       return getStoredSessions();
     },
 
     async get(id: string): Promise<InterviewSession | null> {
-      await delay(300);
+      await delay(200);
       const sessions = getStoredSessions();
       return sessions.find((s) => s.id === id) || null;
     },
@@ -217,12 +485,14 @@ export const api = {
     async create(
       draft: Omit<InterviewSession, 'id' | 'userId' | 'createdAt'>
     ): Promise<InterviewSession> {
-      await delay(700);
+      await delay(500);
       const user = getStoredUser() || defaultMockUser;
       const newSession: InterviewSession = {
         ...draft,
         id: `ses_${Date.now()}`,
         userId: user.id,
+        recordingDownloadCount: 0,
+        recordingExpiresAt: new Date(Date.now() + RECORDING_RETENTION_DAYS * 86400000).toISOString(),
         createdAt: new Date().toISOString(),
       };
       const sessions = [newSession, ...getStoredSessions()];
@@ -231,7 +501,7 @@ export const api = {
     },
 
     async updateStatus(id: string, status: SessionStatus): Promise<InterviewSession> {
-      await delay(400);
+      await delay(300);
       const sessions = getStoredSessions();
       const idx = sessions.findIndex((s) => s.id === id);
       if (idx === -1) {
@@ -245,102 +515,193 @@ export const api = {
 
   payments: {
     async createPayment(
-      planId: 'free' | 'single' | 'pack',
+      purchaseType: 'package' | 'individual',
+      itemId: string,
       senderNumber: string,
       trxId: string
     ): Promise<Payment> {
-      await delay(1200);
+      await delay(1000);
 
-      if (MOCK_FAILURES && trxId.toLowerCase().includes('fail')) {
+      const cleanTrx = trxId.trim().toUpperCase();
+
+      // Duplicate TrxID Prevention
+      const existingPayments: Payment[] = JSON.parse(
+        (typeof window !== 'undefined' && localStorage.getItem(PAYMENTS_STORAGE_KEY)) || '[]'
+      );
+      const duplicate = existingPayments.find(
+        (p) => p.trxId === cleanTrx && (p.status === 'success' || p.status === 'processing')
+      );
+      if (duplicate) {
+        throw new Error(
+          `Transaction ID ${cleanTrx} has already been verified and credited. Duplicate submissions are not allowed.`
+        );
+      }
+
+      // Calculate minutes and amount based on new pricing structure
+      let minutes = 30;
+      let amount = 219;
+      let itemName = 'Starter Package (30 mins)';
+
+      if (purchaseType === 'package') {
+        const pkg = MINUTE_PACKAGES.find((p) => p.id === itemId) || MINUTE_PACKAGES[0];
+        minutes = pkg.includedMinutes;
+        amount = pkg.price;
+        itemName = `${pkg.nameKey.replace('pricing.packages.', '')} Package (${minutes} mins)`;
+      } else {
+        // Individual mock
+        const duration = (parseInt(itemId.replace('individual_', ''), 10) || 15) as 10 | 15 | 20;
+        minutes = duration;
+        amount = INDIVIDUAL_MOCK_PRICES[duration] || 109;
+        itemName = `Individual Mock (${duration} mins)`;
+      }
+
+      if (MOCK_FAILURES && cleanTrx.includes('FAIL')) {
         return {
           id: `pay_${Date.now()}`,
-          planId,
-          amount: planId === 'pack' ? 350 : planId === 'single' ? 120 : 0,
+          userId: 'usr_mock_1',
+          itemType: purchaseType,
+          itemId,
+          itemName,
+          minutesCredited: 0,
+          amount,
           method: 'bkash',
           senderNumber,
-          trxId,
+          trxId: cleanTrx,
           status: 'failed',
           createdAt: new Date().toISOString(),
         };
       }
 
-      if (trxId.toLowerCase().includes('pend')) {
+      if (cleanTrx.includes('PEND')) {
         return {
           id: `pay_${Date.now()}`,
-          planId,
-          amount: planId === 'pack' ? 350 : planId === 'single' ? 120 : 0,
+          userId: 'usr_mock_1',
+          itemType: purchaseType,
+          itemId,
+          itemName,
+          minutesCredited: minutes,
+          amount,
           method: 'bkash',
           senderNumber,
-          trxId,
+          trxId: cleanTrx,
           status: 'pending',
           createdAt: new Date().toISOString(),
         };
       }
 
-      // Add credits on success
+      // Success: credit minutes to user wallet and ledger
       const user = getStoredUser();
+      const expiryDate = new Date(
+        Date.now() + PURCHASED_MINUTES_EXPIRY_DAYS * 86400000
+      ).toISOString();
+
       if (user) {
-        const addedCredits = planId === 'pack' ? 4 : planId === 'single' ? 1 : 1;
-        user.credits += addedCredits;
+        user.minutesBalance += minutes;
+        user.credits = user.minutesBalance;
+        user.minutesExpiresAt = expiryDate;
         setStoredUser(user);
+
+        const ledger = getStoredLedger();
+        const ledgerEntry: MinuteLedgerEntry = {
+          id: `led_pay_${Date.now()}`,
+          userId: user.id,
+          type: purchaseType === 'package' ? 'package_purchase' : 'individual_purchase',
+          minutesChange: minutes,
+          balanceAfter: user.minutesBalance,
+          paymentId: `pay_${Date.now()}`,
+          reason: `Purchased ${itemName} for ৳${amount}`,
+          expiresAt: expiryDate,
+          createdAt: new Date().toISOString(),
+        };
+        setStoredLedger([ledgerEntry, ...ledger]);
       }
 
       const payment: Payment = {
         id: `pay_${Date.now()}`,
-        planId,
-        amount: planId === 'pack' ? 350 : planId === 'single' ? 120 : 0,
+        userId: user?.id || 'usr_mock_1',
+        itemType: purchaseType,
+        itemId,
+        itemName,
+        minutesCredited: minutes,
+        amount,
         method: 'bkash',
         senderNumber,
-        trxId,
+        trxId: cleanTrx,
         status: 'success',
+        verifiedAt: new Date().toISOString(),
         createdAt: new Date().toISOString(),
       };
 
-      const existing = JSON.parse(localStorage.getItem(PAYMENTS_STORAGE_KEY) || '[]');
-      localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify([payment, ...existing]));
-
+      localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify([payment, ...existingPayments]));
       return payment;
     },
 
     async getPayment(id: string): Promise<Payment | null> {
-      await delay(300);
+      await delay(200);
       if (typeof window === 'undefined') return null;
       const raw = localStorage.getItem(PAYMENTS_STORAGE_KEY);
       if (!raw) return null;
       const payments: Payment[] = JSON.parse(raw);
       return payments.find((p) => p.id === id) || null;
     },
+
+    async listPayments(): Promise<Payment[]> {
+      await delay(200);
+      if (typeof window === 'undefined') return [];
+      return JSON.parse(localStorage.getItem(PAYMENTS_STORAGE_KEY) || '[]');
+    },
   },
 
   plans: {
-    getPlans(): PricingPlan[] {
+    // Packages
+    getPackages(): PricingPlan[] {
+      return MINUTE_PACKAGES.map((pkg) => ({
+        id: pkg.id,
+        nameKey: pkg.nameKey,
+        includedMinutes: pkg.includedMinutes,
+        price: pkg.price,
+        popular: pkg.isBestValue,
+        type: 'package',
+      }));
+    },
+
+    // Individual session purchases
+    getIndividualPlans(): PricingPlan[] {
       return [
         {
-          id: 'free',
-          nameKey: 'pricing.freePlan',
-          credits: 1,
-          price: 0,
+          id: 'individual_10',
+          nameKey: 'pricing.individual.10',
+          includedMinutes: 10,
+          price: INDIVIDUAL_MOCK_PRICES[10], // ৳79
+          type: 'individual',
         },
         {
-          id: 'single',
-          nameKey: 'pricing.singlePlan',
-          credits: 1,
-          price: null, // Shows as ৳ XX until configured
+          id: 'individual_15',
+          nameKey: 'pricing.individual.15',
+          includedMinutes: 15,
+          price: INDIVIDUAL_MOCK_PRICES[15], // ৳109
+          isRecommended: true, // Recommended default
+          type: 'individual',
         },
         {
-          id: 'pack',
-          nameKey: 'pricing.packPlan',
-          credits: 4,
-          price: null, // Shows as ৳ XX until configured
-          popular: true,
+          id: 'individual_20',
+          nameKey: 'pricing.individual.20',
+          includedMinutes: 20,
+          price: INDIVIDUAL_MOCK_PRICES[20], // ৳139
+          type: 'individual',
         },
       ];
+    },
+
+    // Legacy plan list
+    getPlans(): PricingPlan[] {
+      return this.getPackages();
     },
   },
 
   reports: {
     async get(sessionId: string): Promise<SessionReport> {
-      await delay(400);
+      await delay(350);
       const session = await api.sessions.get(sessionId);
       let target = 'Junior Software Engineer @ Pathao Ltd.';
       if (session && 'jobTitle' in session.details) {
@@ -357,9 +718,28 @@ export const api = {
         candidateName: 'Tanvir Ahmed',
         targetRole: target,
         date: session?.createdAt || new Date().toISOString(),
+        durationMinutes: session?.lengthMinutes || 15,
+        overallScore: 86,
         overallDelivery: 'strong',
         summaryQuote:
-          'Demonstrated calm articulation, structured STAR reasoning, and strong domain grounding. With 2 specific adjustments in metric quantification and filler pauses, you will stand out on any top panel.',
+          'Demonstrated calm articulation, structured STAR reasoning, and strong domain grounding. With specific adjustments in metric quantification and filler pauses, you will stand out on any top panel.',
+        categories: {
+          communicationSkills: {
+            score: 88,
+            feedback:
+              'Crisp articulation with clear sentence endings. Excellent tonal pacing that avoids trailing off.',
+          },
+          confidenceAndClarity: {
+            score: 84,
+            feedback:
+              'Maintained steady eye contact, took deliberate 1-second breath pauses before responding to tough probes.',
+          },
+          answerRelevance: {
+            score: 89,
+            feedback:
+              'Directly addressed the core of situational questions using clear context and measurable engineering outcomes.',
+          },
+        },
         strengths: [
           {
             title: 'Structured STAR Framework Usage',
@@ -388,6 +768,16 @@ export const api = {
             description:
               'Under pressure in Question 4, you repeated "actually" and "mane" 7 times within 40 seconds. Embrace a silent 2-second pause instead of vocalizing hesitation.',
           },
+        ],
+        specificRecommendations: [
+          'Practice 2-minute timed responses to avoid over-explaining background context.',
+          'State the business impact or user scale in your very first sentence.',
+          'When asked about weaknesses, immediately pair your answer with a recent learning action.',
+        ],
+        suggestedPracticeQuestions: [
+          'Can you walk us through a time an architectural decision you advocated for failed in production?',
+          'How would you prioritize three urgent production bug tickets when the engineering manager is unavailable?',
+          'Explain how you ensure secure data handling when integrating third-party payment gateways like bKash.',
         ],
         flaggedMoments: [
           {
@@ -459,12 +849,24 @@ export const api = {
   },
 
   recordings: {
-    async get(sessionId: string): Promise<SessionRecording> {
-      await delay(400);
+    async get(sessionId: string): Promise<SessionRecording | null> {
+      await delay(300);
+      const raw =
+        typeof window !== 'undefined'
+          ? localStorage.getItem(`${RECORDINGS_STORAGE_KEY}:${sessionId}`)
+          : null;
+      if (raw) {
+        return JSON.parse(raw);
+      }
+
+      // Default sample recording
       return {
         id: `rec_${sessionId}`,
         sessionId,
         durationSeconds: 520,
+        downloadCount: 0,
+        isDeleted: false,
+        retentionExpiryDate: new Date(Date.now() + RECORDING_RETENTION_DAYS * 86400000).toISOString(),
         transcript: [
           {
             timeSeconds: 0,
@@ -529,6 +931,45 @@ export const api = {
         ],
       };
     },
+
+    /**
+     * Download recording and automatically delete from server after one successful download.
+     * Note: Feedback report is permanently preserved!
+     */
+    async downloadAndPurge(
+      sessionId: string
+    ): Promise<{ success: boolean; deleted: boolean; message: string }> {
+      await delay(600);
+      const recording = await this.get(sessionId);
+      if (!recording) throw new Error('Recording not found.');
+
+      if (recording.isDeleted) {
+        throw new Error(
+          'This recording was already permanently deleted following its first download or retention policy.'
+        );
+      }
+
+      recording.downloadCount += 1;
+      recording.downloadedAt = new Date().toISOString();
+      recording.isDeleted = true;
+      recording.deletedAt = new Date().toISOString();
+      recording.deletedReason = 'downloaded_once';
+      delete recording.videoUrl;
+      delete recording.audioUrl;
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(
+          `${RECORDINGS_STORAGE_KEY}:${sessionId}`,
+          JSON.stringify(recording)
+        );
+      }
+
+      return {
+        success: true,
+        deleted: true,
+        message:
+          'Recording downloaded and permanently purged from server. Your AI Feedback Report remains fully accessible.',
+      };
+    },
   },
 };
-

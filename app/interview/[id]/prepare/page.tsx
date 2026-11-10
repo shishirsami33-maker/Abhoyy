@@ -285,6 +285,19 @@ export default function PrepareRoomPage() {
           </div>
         </div>
 
+        {/* Minute Reassurance Banner */}
+        <div className="mb-6 p-4 rounded-2xl bg-violet-50 border border-violet-200 text-xs text-violet-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <Shield className="w-4 h-4 text-violet-600 shrink-0" />
+            <span>
+              <strong>Zero minutes deducted so far.</strong> Your {session?.lengthMinutes || 15} minutes will only be deducted when your live interview board begins.
+            </span>
+          </div>
+          <span className="font-mono font-bold text-violet-700 bg-white px-2.5 py-1 rounded-md border border-violet-200 shrink-0 w-fit">
+            {session?.lengthMinutes || 15} Mins Session
+          </span>
+        </div>
+
         {/* Mobile Navigation Tabs */}
         <div className="lg:hidden flex border-b border-gray-200 mb-6 bg-white rounded-xl p-1 shadow-sm">
           <button

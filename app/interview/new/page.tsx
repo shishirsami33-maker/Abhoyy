@@ -22,6 +22,9 @@ import {
   Languages,
   UserCheck,
   CheckCircle2,
+  Lock,
+  Gift,
+  Video,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useLanguage } from '@/lib/hooks/useLanguage';
@@ -33,7 +36,12 @@ import {
   PanelStyle,
   User,
 } from '@/types';
-import { MAX_CV_SIZE_MB, FREE_FIRST_MOCK } from '@/config';
+import {
+  MAX_CV_SIZE_MB,
+  FREE_FIRST_MOCK,
+  INDIVIDUAL_MOCK_PRICES,
+} from '@/config';
+import { toBanglaDigits } from '@/lib/utils';
 
 const DRAFT_STORAGE_KEY = 'abhoyy:draft';
 
@@ -54,9 +62,9 @@ interface WizardDraft {
   notes: string;
   language: InterviewLang;
   panelStyle: PanelStyle;
-  lengthMinutes: 10 | 15 | 20;
+  lengthMinutes: 5 | 10 | 15 | 20;
   termsConsent: boolean;
-  recordingConsent: boolean;
+  recordingRequested: boolean;
 }
 
 const defaultDraft: WizardDraft = {
@@ -76,9 +84,9 @@ const defaultDraft: WizardDraft = {
   notes: '',
   language: 'mixed',
   panelStyle: 'standard',
-  lengthMinutes: 15,
+  lengthMinutes: 15, // 15 minutes is recommended default
   termsConsent: false,
-  recordingConsent: false,
+  recordingRequested: false, // Recording disabled by default
 };
 
 export default function NewInterviewWizard() {
@@ -118,65 +126,83 @@ export default function NewInterviewWizard() {
     }
   }, [draft]);
 
-  // Focus step heading on change
-  useEffect(() => {
-    headingRef.current?.focus();
-  }, [draft.step]);
+  const updateField = (field: keyof WizardDraft, value: any) => {
+    setDraft((prev) => ({ ...prev, [field]: value }));
+  };
 
-  const updateField = (field: keyof WizardDraft, val: any) => {
-    setDraft((prev) => ({ ...prev, [field]: val }));
+  // Step Validation
+  const validateStep = (stepNumber: number): boolean => {
+    switch (stepNumber) {
+      case 1:
+        if (!draft.type) {
+          toast('Please select an interview format.', 'warning');
+          return false;
+        }
+        return true;
+      case 2:
+        if (!draft.cvFileName) {
+          toast('Please upload your CV (PDF or DOCX format).', 'warning');
+          return false;
+        }
+        return true;
+      case 3:
+        if (draft.type === 'job' || draft.type === 'bank_mnc') {
+          if (!draft.jobTitle.trim() || !draft.company.trim()) {
+            toast('Please enter both the Job Title and Company.', 'warning');
+            return false;
+          }
+        } else if (draft.type === 'university_viva') {
+          if (!draft.subject.trim()) {
+            toast('Please enter your department or viva subject.', 'warning');
+            return false;
+          }
+        }
+        return true;
+      case 4:
+        return true;
+      case 5:
+        if (!draft.termsConsent) {
+          toast('Please accept the Terms of Service to proceed.', 'warning');
+          return false;
+        }
+        return true;
+      default:
+        return true;
+    }
   };
 
   const handleNext = () => {
-    // Validate current step
-    if (draft.step === 1 && !draft.type) {
-      toast('Please select an interview format to continue.', 'warning');
-      return;
+    if (validateStep(draft.step)) {
+      setDirection(1);
+      const nextStep = draft.step + 1;
+      setDraft((prev) => ({ ...prev, step: nextStep }));
+      setTimeout(() => headingRef.current?.focus(), 150);
     }
-    if (draft.step === 2 && !draft.cvFileName) {
-      toast('Please upload your CV or resume.', 'warning');
-      return;
-    }
-    if (draft.step === 3) {
-      if (draft.type === 'job' || draft.type === 'bank_mnc') {
-        if (!draft.jobTitle.trim() || !draft.company.trim()) {
-          toast('Please enter both the Job Title and Hiring Company.', 'warning');
-          return;
-        }
-      } else if (draft.type === 'university_viva') {
-        if (!draft.subject.trim()) {
-          toast('Please enter your subject or department.', 'warning');
-          return;
-        }
-      }
-    }
-
-    setDirection(1);
-    setDraft((prev) => ({ ...prev, step: prev.step + 1 }));
   };
 
   const handleBack = () => {
     if (draft.step > 1) {
       setDirection(-1);
-      setDraft((prev) => ({ ...prev, step: prev.step - 1 }));
+      const prevStep = draft.step - 1;
+      setDraft((prev) => ({ ...prev, step: prevStep }));
+      setTimeout(() => headingRef.current?.focus(), 150);
     }
   };
 
-  // CV File Upload handler
+  // CV File Upload Handler
   const handleFileUpload = async (file: File) => {
     setCvError('');
-    if (file.size > MAX_CV_SIZE_MB * 1024 * 1024) {
-      setCvError(`File size exceeds the ${MAX_CV_SIZE_MB} MB limit.`);
-      return;
-    }
-
     try {
       const res = await api.uploads.uploadCv(file);
-      updateField('cvFileName', res.fileName);
-      updateField('cvFileSize', res.size);
-      toast('Resume attached successfully.', 'success');
+      setDraft((prev) => ({
+        ...prev,
+        cvFileName: res.fileName,
+        cvFileSize: res.size,
+      }));
+      toast('CV uploaded and parsed successfully.', 'success');
     } catch (err: any) {
-      setCvError(err.message || 'Failed to upload CV.');
+      setCvError(err.message || 'File upload failed.');
+      toast(err.message, 'error');
     }
   };
 
@@ -199,24 +225,27 @@ export default function NewInterviewWizard() {
     updateField('topics', draft.topics.filter((_, i) => i !== index));
   };
 
+  const duration = draft.lengthMinutes;
+  const isFreeMockSelected = duration === 5;
+  const isFreeEligible = currentUser?.freeMockEligible ?? false;
+  const minuteBalance = currentUser?.minutesBalance ?? 0;
+  const hasSufficientMinutes = isFreeMockSelected ? (isFreeEligible || minuteBalance >= 5) : minuteBalance >= duration;
+
   // Final Submit
   const handleFinish = async () => {
-    if (!draft.termsConsent || !draft.recordingConsent) {
-      toast('Please accept both the Terms and the Recording consent checkboxes.', 'warning');
+    if (!draft.termsConsent) {
+      toast('Please accept the Terms of Service and Privacy Policy to proceed.', 'warning');
       return;
     }
 
-    // Check credits
-    const balance = currentUser?.credits ?? 0;
-    if (balance <= 0) {
-      // Need to buy credits -> checkout
-      router.push('/checkout?plan=single');
+    if (!hasSufficientMinutes) {
+      toast(`You need at least ${duration} minutes in your wallet. Directing to bKash checkout...`, 'info');
+      router.push(`/checkout?plan=individual_${duration}&type=individual`);
       return;
     }
 
     setIsSubmitting(true);
     try {
-      // Build session object
       const details =
         draft.type === 'job' || draft.type === 'bank_mnc'
           ? {
@@ -244,11 +273,14 @@ export default function NewInterviewWizard() {
         language: draft.language,
         panelStyle: draft.panelStyle,
         lengthMinutes: draft.lengthMinutes,
+        isFreeMock: isFreeMockSelected && isFreeEligible,
         consent: {
           terms: true,
-          recording: true,
+          recording: draft.recordingRequested,
           acceptedAt: new Date().toISOString(),
         },
+        recordingRequested: draft.recordingRequested,
+        recordingDownloadCount: 0,
         status: 'ready',
       });
 
@@ -341,16 +373,16 @@ export default function NewInterviewWizard() {
             </div>
           </aside>
 
-          {/* Center Form Stage (6 cols) */}
-          <main className="lg:col-span-6 bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 shadow-card min-h-[520px] flex flex-col justify-between">
+          {/* Center Form Area (6 cols) */}
+          <main className="lg:col-span-6 bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 shadow-card min-h-[500px] flex flex-col justify-between">
             <div>
               <AnimatePresence mode="wait">
                 <motion.div
                   key={draft.step}
-                  initial={{ opacity: 0, x: direction * 24 }}
+                  initial={{ opacity: 0, x: direction * 20 }}
                   animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: direction * -24 }}
-                  transition={{ duration: 0.25 }}
+                  exit={{ opacity: 0, x: -direction * 20 }}
+                  transition={{ duration: 0.25, ease: 'easeOut' }}
                 >
                   {/* Step 1: Type Selection */}
                   {draft.step === 1 && (
@@ -367,47 +399,58 @@ export default function NewInterviewWizard() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {[
                           {
-                            type: 'job' as InterviewType,
-                            title: t('wizard.typeJob'),
-                            desc: t('wizard.typeJobDesc'),
-                            icon: <Briefcase className="w-5 h-5 text-violet-600" />,
-                          },
-                          {
-                            type: 'bank_mnc' as InterviewType,
-                            title: t('wizard.typeBank'),
-                            desc: t('wizard.typeBankDesc'),
-                            icon: <Building2 className="w-5 h-5 text-volt-500" />,
-                          },
-                          {
-                            type: 'bcs_viva' as InterviewType,
-                            title: t('wizard.typeBcs'),
-                            desc: t('wizard.typeBcsDesc'),
-                            icon: <Landmark className="w-5 h-5 text-violet-600" />,
-                          },
-                          {
-                            type: 'university_viva' as InterviewType,
+                            id: 'university_viva',
                             title: t('wizard.typeUni'),
                             desc: t('wizard.typeUniDesc'),
-                            icon: <GraduationCap className="w-5 h-5 text-volt-500" />,
+                            icon: GraduationCap,
+                          },
+                          {
+                            id: 'job',
+                            title: t('wizard.typeJob'),
+                            desc: t('wizard.typeJobDesc'),
+                            icon: Briefcase,
+                          },
+                          {
+                            id: 'bcs_viva',
+                            title: t('wizard.typeBcs'),
+                            desc: t('wizard.typeBcsDesc'),
+                            icon: Landmark,
+                          },
+                          {
+                            id: 'bank_mnc',
+                            title: t('wizard.typeBank'),
+                            desc: t('wizard.typeBankDesc'),
+                            icon: Building2,
                           },
                         ].map((item) => {
-                          const isSelected = draft.type === item.type;
+                          const Icon = item.icon;
+                          const isSelected = draft.type === item.id;
                           return (
                             <button
-                              key={item.type}
+                              key={item.id}
                               type="button"
-                              onClick={() => updateField('type', item.type)}
-                              className={`p-5 rounded-2xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                              onClick={() => updateField('type', item.id)}
+                              className={`p-5 rounded-2xl border text-left cursor-pointer transition-all ${
                                 isSelected
-                                  ? 'border-violet-600 bg-violet-50/60 ring-2 ring-violet-600 shadow-sm'
-                                  : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-card'
+                                  ? 'border-violet-600 bg-violet-50/70 ring-2 ring-violet-600 shadow-sm'
+                                  : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
                               }`}
                             >
-                              <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center mb-3 border border-gray-100">
-                                {item.icon}
+                              <div
+                                className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${
+                                  isSelected
+                                    ? 'bg-violet-600 text-paper'
+                                    : 'bg-violet-50 text-violet-600'
+                                }`}
+                              >
+                                <Icon className="w-5 h-5" />
                               </div>
-                              <h3 className="text-base font-bold text-ink-900 mb-1">{item.title}</h3>
-                              <p className="text-xs text-gray-500 leading-relaxed">{item.desc}</p>
+                              <h3 className="text-base font-bold text-ink-900 mb-1">
+                                {item.title}
+                              </h3>
+                              <p className="text-xs text-gray-500 leading-relaxed">
+                                {item.desc}
+                              </p>
                             </button>
                           );
                         })}
@@ -415,7 +458,7 @@ export default function NewInterviewWizard() {
                     </div>
                   )}
 
-                  {/* Step 2: Upload CV */}
+                  {/* Step 2: CV Upload */}
                   {draft.step === 2 && (
                     <div>
                       <h2
@@ -427,82 +470,95 @@ export default function NewInterviewWizard() {
                       </h2>
                       <p className="text-sm text-gray-600 mb-6">{t('wizard.cvSub')}</p>
 
-                      {draft.cvFileName ? (
-                        <div className="p-6 rounded-2xl bg-violet-50/70 border border-violet-200 flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-xl bg-violet-600 text-paper flex items-center justify-center font-bold">
-                              <FileText className="w-6 h-6" />
-                            </div>
-                            <div>
-                              <p className="text-sm font-bold text-ink-900">{draft.cvFileName}</p>
-                              <p className="text-xs text-gray-500">
-                                {draft.cvFileSize
-                                  ? `${(draft.cvFileSize / (1024 * 1024)).toFixed(2)} MB`
-                                  : 'Document attached'}
-                              </p>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              updateField('cvFileName', '');
-                              updateField('cvFileSize', undefined);
-                            }}
-                            className="p-2 text-gray-400 hover:text-red-500 rounded-full transition-colors"
-                            aria-label={t('wizard.removeCv')}
-                          >
-                            <X className="w-5 h-5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div
-                          onDragOver={(e) => e.preventDefault()}
-                          onDrop={handleDrop}
-                          onClick={() => fileInputRef.current?.click()}
-                          className="border-2 border-dashed border-gray-300 hover:border-violet-600 rounded-3xl p-8 sm:p-12 text-center cursor-pointer transition-colors bg-paper/50 flex flex-col items-center justify-center group mb-4"
-                        >
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".pdf,.docx,.doc"
-                            className="hidden"
-                            onChange={(e) => {
-                              if (e.target.files && e.target.files[0]) {
-                                handleFileUpload(e.target.files[0]);
-                              }
-                            }}
-                          />
-                          <div className="w-14 h-14 rounded-full bg-violet-100 group-hover:bg-violet-600 group-hover:text-paper text-violet-600 flex items-center justify-center mb-4 transition-colors">
-                            <FileUp className="w-6 h-6" />
-                          </div>
-                          <h4 className="text-base font-bold text-ink-900 mb-1">
-                            {t('wizard.dropzoneText')}
-                          </h4>
-                          <p className="text-xs text-gray-500 max-w-xs">{t('wizard.dropzoneHint')}</p>
-                        </div>
-                      )}
-
-                      {/* Error */}
-                      {cvError && (
-                        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs font-semibold text-amber-800 flex items-center gap-2 mb-4">
-                          <AlertCircle className="w-4 h-4 shrink-0" />
-                          <span>{cvError}</span>
-                        </div>
-                      )}
-
-                      {/* Use last CV chip */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          updateField('cvFileName', 'Tanvir_Ahmed_Resume_2026.pdf');
-                          updateField('cvFileSize', 1024 * 350);
-                          toast('Attached previously saved resume.', 'info');
-                        }}
-                        className="text-xs text-violet-600 font-bold hover:underline inline-flex items-center gap-1.5"
+                      <div
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={handleDrop}
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
+                          draft.cvFileName
+                            ? 'border-success-600 bg-success-600/5'
+                            : cvError
+                            ? 'border-amber-500 bg-amber-500/5'
+                            : 'border-gray-300 hover:border-violet-600 bg-paper'
+                        }`}
                       >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>{t('wizard.useLastCv')}</span>
-                      </button>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".pdf,.docx,.doc"
+                          className="hidden"
+                          onChange={(e) =>
+                            e.target.files && handleFileUpload(e.target.files[0])
+                          }
+                        />
+
+                        {draft.cvFileName ? (
+                          <div className="flex flex-col items-center">
+                            <div className="w-12 h-12 rounded-xl bg-success-600 text-paper flex items-center justify-center mb-3">
+                              <CheckCircle2 className="w-6 h-6" />
+                            </div>
+                            <h4 className="text-base font-bold text-ink-900 mb-1">
+                              {t('wizard.cvSelected')}
+                            </h4>
+                            <p className="text-xs text-gray-600 font-mono mb-4">
+                              {draft.cvFileName}{' '}
+                              {draft.cvFileSize
+                                ? `(${(draft.cvFileSize / (1024 * 1024)).toFixed(2)} MB)`
+                                : ''}
+                            </p>
+                            <Button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateField('cvFileName', '');
+                                updateField('cvFileSize', undefined);
+                              }}
+                              variant="secondary"
+                              size="sm"
+                              className="text-xs"
+                            >
+                              {t('wizard.removeCv')}
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center">
+                            <div className="w-12 h-12 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center mb-3">
+                              <FileUp className="w-6 h-6" />
+                            </div>
+                            <h4 className="text-base font-bold text-ink-900 mb-1">
+                              {t('wizard.dropzoneText')}
+                            </h4>
+                            <p className="text-xs text-gray-500 max-w-xs leading-relaxed">
+                              {t('wizard.dropzoneHint')}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {cvError && (
+                        <p className="text-xs text-amber-600 mt-2 font-medium flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          <span>{cvError}</span>
+                        </p>
+                      )}
+
+                      <div className="mt-4 flex items-center justify-between">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDraft((p) => ({
+                              ...p,
+                              cvFileName: 'Tanvir_Resume_2026.pdf',
+                              cvFileSize: 1.4 * 1024 * 1024,
+                            }));
+                            toast('Using cached CV from last session.', 'info');
+                          }}
+                          className="text-xs text-violet-600 font-bold hover:underline inline-flex items-center gap-1.5"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>{t('wizard.useLastCv')}</span>
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -657,7 +713,7 @@ export default function NewInterviewWizard() {
                     </div>
                   )}
 
-                  {/* Step 4: Preferences */}
+                  {/* Step 4: Preferences (Language, Panel Demeanor, Duration) */}
                   {draft.step === 4 && (
                     <div>
                       <h2
@@ -725,26 +781,83 @@ export default function NewInterviewWizard() {
                         </div>
                       </div>
 
-                      {/* Interview Length */}
+                      {/* Interview Length (5 mins [if eligible], 10 mins, 15 mins [recommended default], 20 mins) */}
                       <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-2">
-                          {t('wizard.lengthLabel')}
-                        </label>
-                        <div className="grid grid-cols-3 gap-3">
-                          {[10, 15, 20].map((mins) => (
-                            <button
-                              key={mins}
-                              type="button"
-                              onClick={() => updateField('lengthMinutes', mins)}
-                              className={`p-3 rounded-xl border text-center cursor-pointer font-bold text-sm transition-all ${
-                                draft.lengthMinutes === mins
-                                  ? 'border-violet-600 bg-violet-600 text-paper shadow-sm'
-                                  : 'border-gray-200 bg-white text-ink-900 hover:border-gray-300'
-                              }`}
-                            >
-                              {mins} mins
-                            </button>
-                          ))}
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-xs font-bold uppercase tracking-wider text-gray-700">
+                            {t('wizard.lengthLabel')}
+                          </label>
+                          <span className="text-[11px] text-violet-600 font-semibold">
+                            15 min is recommended default
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                          {/* 5 mins option */}
+                          <button
+                            type="button"
+                            onClick={() => updateField('lengthMinutes', 5)}
+                            className={`p-3 rounded-xl border text-center cursor-pointer transition-all relative ${
+                              draft.lengthMinutes === 5
+                                ? 'border-violet-600 bg-violet-50/80 ring-2 ring-violet-600 font-bold text-ink-900'
+                                : 'border-gray-200 bg-white text-ink-900 hover:border-gray-300'
+                            }`}
+                          >
+                            {isFreeEligible && (
+                              <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-volt-400 text-ink-900 text-[9px] font-black uppercase px-2 py-0.2 rounded-full shadow-sm">
+                                Free Mock
+                              </span>
+                            )}
+                            <p className="text-sm font-black">5 Mins</p>
+                            <p className="text-[10px] text-gray-500">
+                              {isFreeEligible ? 'Free' : '5 mins'}
+                            </p>
+                          </button>
+
+                          {/* 10 mins */}
+                          <button
+                            type="button"
+                            onClick={() => updateField('lengthMinutes', 10)}
+                            className={`p-3 rounded-xl border text-center cursor-pointer transition-all ${
+                              draft.lengthMinutes === 10
+                                ? 'border-violet-600 bg-violet-50/80 ring-2 ring-violet-600 font-bold text-ink-900'
+                                : 'border-gray-200 bg-white text-ink-900 hover:border-gray-300'
+                            }`}
+                          >
+                            <p className="text-sm font-black">10 Mins</p>
+                            <p className="text-[10px] text-gray-500">৳79</p>
+                          </button>
+
+                          {/* 15 mins (Recommended Default) */}
+                          <button
+                            type="button"
+                            onClick={() => updateField('lengthMinutes', 15)}
+                            className={`p-3 rounded-xl border text-center cursor-pointer transition-all relative ${
+                              draft.lengthMinutes === 15
+                                ? 'border-violet-600 bg-violet-600 text-paper font-bold shadow-md'
+                                : 'border-gray-200 bg-white text-ink-900 hover:border-gray-300'
+                            }`}
+                          >
+                            <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-volt-400 text-ink-900 text-[9px] font-black uppercase px-2 py-0.2 rounded-full shadow-sm">
+                              Default
+                            </span>
+                            <p className="text-sm font-black">15 Mins</p>
+                            <p className={`text-[10px] ${draft.lengthMinutes === 15 ? 'text-gray-200' : 'text-gray-500'}`}>৳109</p>
+                          </button>
+
+                          {/* 20 mins */}
+                          <button
+                            type="button"
+                            onClick={() => updateField('lengthMinutes', 20)}
+                            className={`p-3 rounded-xl border text-center cursor-pointer transition-all ${
+                              draft.lengthMinutes === 20
+                                ? 'border-violet-600 bg-violet-50/80 ring-2 ring-violet-600 font-bold text-ink-900'
+                                : 'border-gray-200 bg-white text-ink-900 hover:border-gray-300'
+                            }`}
+                          >
+                            <p className="text-sm font-black">20 Mins</p>
+                            <p className="text-[10px] text-gray-500">৳139</p>
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -780,15 +893,56 @@ export default function NewInterviewWizard() {
                             {draft.jobTitle || draft.cadre || draft.subject || 'Not specified'}
                           </span>
                         </div>
-                        <div className="flex justify-between items-center py-1">
+                        <div className="flex justify-between items-center py-1 border-b border-gray-200/60">
                           <span className="text-gray-500">Mode & Duration:</span>
                           <span className="font-bold text-ink-900 capitalize">
                             {draft.language} • {draft.panelStyle} • {draft.lengthMinutes} mins
                           </span>
                         </div>
+                        <div className="flex justify-between items-center py-1">
+                          <span className="text-gray-500">Recording Status:</span>
+                          <span className="font-bold text-ink-900">
+                            {draft.recordingRequested ? 'Enabled (Optional)' : 'Disabled (Default)'}
+                          </span>
+                        </div>
                       </div>
 
-                      {/* Required Plain-Language Consents */}
+                      {/* Minute Deduction Reassurance Notice */}
+                      <div className="p-4 rounded-xl bg-violet-50 border border-violet-200 text-xs text-violet-900 mb-5 flex items-start gap-2.5">
+                        <Shield className="w-4 h-4 text-violet-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold mb-0.5">Minute Deduction Policy</p>
+                          <p className="text-violet-800 leading-relaxed">
+                            No minutes are deducted now. Exactly{' '}
+                            <strong>{draft.lengthMinutes} minutes</strong> will be deducted from your wallet
+                            only when you enter the live interview room.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Recording Policy Section (Optional, Disabled by default) */}
+                      <div className="mb-5 p-4 rounded-xl border border-gray-200 bg-white">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <Video className="w-4 h-4 text-violet-600" />
+                          <h4 className="text-xs font-bold text-ink-900 uppercase tracking-wider">
+                            {t('wizard.recordingSectionTitle')}
+                          </h4>
+                        </div>
+                        <p className="text-xs text-gray-500 mb-3 leading-relaxed">
+                          {t('wizard.recordingSectionDesc')}
+                        </p>
+                        <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-ink-900">
+                          <input
+                            type="checkbox"
+                            checked={draft.recordingRequested}
+                            onChange={(e) => updateField('recordingRequested', e.target.checked)}
+                            className="w-4 h-4 rounded text-violet-600 focus:ring-violet-600"
+                          />
+                          <span>{t('wizard.recordingEnableOption')}</span>
+                        </label>
+                      </div>
+
+                      {/* Required Terms Consent */}
                       <div className="space-y-3 mb-4">
                         <label className="flex items-start gap-3 p-3.5 rounded-xl border border-gray-200 bg-white cursor-pointer hover:border-violet-600/40 transition-colors">
                           <input
@@ -799,18 +953,6 @@ export default function NewInterviewWizard() {
                           />
                           <span className="text-xs sm:text-sm text-ink-900 font-medium">
                             {t('wizard.consentTerms')}
-                          </span>
-                        </label>
-
-                        <label className="flex items-start gap-3 p-3.5 rounded-xl border border-gray-200 bg-white cursor-pointer hover:border-violet-600/40 transition-colors">
-                          <input
-                            type="checkbox"
-                            checked={draft.recordingConsent}
-                            onChange={(e) => updateField('recordingConsent', e.target.checked)}
-                            className="w-4 h-4 mt-0.5 rounded text-violet-600 focus:ring-violet-600 shrink-0"
-                          />
-                          <span className="text-xs sm:text-sm text-ink-900 font-medium">
-                            {t('wizard.consentRecording')}
                           </span>
                         </label>
                       </div>
@@ -840,15 +982,17 @@ export default function NewInterviewWizard() {
                 <Button
                   type="button"
                   onClick={handleFinish}
-                  variant="volt"
+                  variant={hasSufficientMinutes ? 'volt' : 'primary'}
                   size="lg"
                   isLoading={isSubmitting}
-                  disabled={!draft.termsConsent || !draft.recordingConsent}
+                  disabled={!draft.termsConsent}
                   className="gap-2 font-black"
                 >
                   <span>
-                    {(currentUser?.credits ?? 0) > 0
-                      ? t('wizard.submitCredit')
+                    {isFreeMockSelected && isFreeEligible
+                      ? t('wizard.submitFree')
+                      : hasSufficientMinutes
+                      ? `Proceed (${draft.lengthMinutes} mins)`
                       : t('wizard.submitPay')}
                   </span>
                   <ArrowRight className="w-4 h-4" />
@@ -887,16 +1031,27 @@ export default function NewInterviewWizard() {
               </div>
 
               <div>
-                <p className="text-gray-400 font-semibold mb-0.5">Language & Duration:</p>
-                <p className="font-bold text-paper capitalize">
-                  {draft.language} • {draft.lengthMinutes} mins
+                <p className="text-gray-400 font-semibold mb-0.5">Duration:</p>
+                <p className="font-bold text-paper">
+                  {draft.lengthMinutes} Minutes
+                  {draft.lengthMinutes === 15 && ' (Recommended Default)'}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-gray-400 font-semibold mb-0.5">Recording:</p>
+                <p className="font-bold text-paper">
+                  {draft.recordingRequested ? 'Enabled (Optional)' : 'Disabled (Default)'}
                 </p>
               </div>
 
               <div className="pt-4 border-t border-gray-800">
-                <p className="text-gray-400 mb-1">Your Balance:</p>
-                <p className="text-sm font-extrabold text-volt-400">
-                  {currentUser?.credits ?? 0} Credits Available
+                <p className="text-gray-400 mb-1">Your Minute Balance:</p>
+                <p className="text-base font-black text-volt-400">
+                  {minuteBalance} Minutes Available
+                </p>
+                <p className="text-[10px] text-gray-400 mt-1">
+                  Deducted only upon entering the live room.
                 </p>
               </div>
             </div>
@@ -906,4 +1061,3 @@ export default function NewInterviewWizard() {
     </div>
   );
 }
-

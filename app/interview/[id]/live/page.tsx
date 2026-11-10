@@ -145,23 +145,33 @@ export default function LiveInterviewRoomPage() {
     }
   }, [stage]);
 
-  // Step 2: 3, 2, 1 Countdown
+  // Step 2: 3, 2, 1 Countdown -> transitions to LIVE interview & deducts minutes
   useEffect(() => {
     if (stage === 'countdown') {
       if (countdownNum > 1) {
         const timer = setTimeout(() => setCountdownNum((prev) => prev - 1), 1000);
         return () => clearTimeout(timer);
       } else {
-        const timer = setTimeout(() => {
+        const timer = setTimeout(async () => {
           setStage('interview');
           setOrbState('speaking');
+
+          // DEDUCT MINUTES EXACTLY WHEN LIVE BEGINS (Section 3 rule)
+          try {
+            const mins = (session?.lengthMinutes || 15) as 5 | 10 | 15 | 20;
+            const res = await api.wallet.deductForLiveSession(sessionId, mins);
+            toast(`${res.deducted} minutes deducted from wallet for this live session.`, 'info');
+          } catch (err: any) {
+            console.warn('Deduction notification:', err.message);
+          }
+
           // Speak question then switch to listening
           setTimeout(() => setOrbState('listening'), 2500);
         }, 1000);
         return () => clearTimeout(timer);
       }
     }
-  }, [stage, countdownNum]);
+  }, [stage, countdownNum, session, sessionId, toast]);
 
   // Setup media stream & local recorder in memory
   useEffect(() => {
@@ -210,8 +220,8 @@ export default function LiveInterviewRoomPage() {
         };
         checkLevel();
 
-        // Local In-Memory MediaRecorder (discarded at end)
-        if (typeof MediaRecorder !== 'undefined') {
+        // Local In-Memory MediaRecorder (only if user explicitly opted in & consented)
+        if (session?.recordingRequested && typeof MediaRecorder !== 'undefined') {
           const recorder = new MediaRecorder(localStream);
           mediaRecorderRef.current = recorder;
           recorder.start(1000);
@@ -433,14 +443,24 @@ export default function LiveInterviewRoomPage() {
       {/* Top Status & Security Bar */}
       <div className="bg-ink-800/80 border-b border-gray-800 px-4 sm:px-6 py-3 flex items-center justify-between z-20">
         <div className="flex items-center gap-3">
-          {/* Recording Dot with tooltip */}
-          <div
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-950/60 border border-red-800/80 text-xs text-red-400 font-semibold cursor-help"
-            title={t('room.recordingTooltip')}
-          >
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            <span>{t('room.recordingBadge')}</span>
-          </div>
+          {/* Recording Badge based on user preference */}
+          {session?.recordingRequested ? (
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-950/60 border border-red-800/80 text-xs text-red-400 font-semibold cursor-help"
+              title="Recording is active with your explicit consent. It will be purged after download or in 30 days."
+            >
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              <span>Recording Live (Optional)</span>
+            </div>
+          ) : (
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-ink-700 border border-gray-700 text-xs text-gray-400 font-medium"
+              title="Recording is disabled per your setup selection."
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
+              <span>Recording Off</span>
+            </div>
+          )}
 
           <span className="hidden sm:inline text-gray-600">|</span>
 
@@ -726,6 +746,29 @@ export default function LiveInterviewRoomPage() {
                     <p className="font-bold text-paper mb-1">3. Don&apos;t rush your pause</p>
                     <p>Taking 2–3 seconds to collect your thoughts before answering is perceived as thoughtful, not weak.</p>
                   </div>
+                </div>
+
+                {/* Technical Failure Recovery (Section 3 Requirement) */}
+                <div className="mt-6 pt-4 border-t border-gray-800">
+                  <p className="text-xs font-bold text-gray-400 mb-1">Experiencing Technical Disruption?</p>
+                  <p className="text-[11px] text-gray-500 mb-3 leading-relaxed">
+                    If a browser audio freeze or network failure prevents your interview, restore your deducted minutes back to your wallet.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await api.wallet.restoreMinutesForFailure(sessionId, 'Candidate reported technical difficulty');
+                        toast(`Restored ${res.restored} minutes back to your wallet.`, 'success');
+                        router.push('/dashboard');
+                      } catch (err: any) {
+                        toast(err.message || 'Failed to restore minutes.', 'error');
+                      }
+                    }}
+                    className="w-full py-2 px-3 rounded-xl bg-amber-500/10 border border-amber-500/40 text-amber-400 text-xs font-bold hover:bg-amber-500/20 transition-all text-center"
+                  >
+                    Restore Deducted Minutes & Exit
+                  </button>
                 </div>
               </div>
 
