@@ -17,6 +17,23 @@ export const SESSION_EXPIRY_DAYS = 7;
 export const LEGAL_DRAFT_BANNER = true;
 export const MOCK_FAILURES = false; // toggle to test error states
 
+export const CONTACT_INFO = {
+  phone: "+880 1816729550",
+  phoneRaw: "+8801816729550",
+  whatsapp: "+880 1816729550",
+  whatsappUrl: "https://wa.me/8801816729550",
+  email: "shishirsami33@gmail.com",
+  linkedin: "https://www.linkedin.com/in/shishirsami",
+  twitter: "https://x.com/SamiShishi39925",
+  facebook: "https://www.facebook.com/shahriarshishirsami",
+  instagram: "https://www.instagram.com/_shi_shir_33",
+  founderPortfolio: "https://www.shishirsami.com/",
+  founderName: "Shahriar Shishir Sami",
+  parentCompany: "ShishirSami Labs",
+  parentCompanyUrl: "https://www.shishirsami.com/shishirsamilabs",
+  institution: "American International University-Bangladesh",
+};
+
 export const NAV_LINKS = [
   { href: "/how-it-works", labelKey: "nav.howItWorks" },
   { href: "/#interview-types", labelKey: "nav.types" },
