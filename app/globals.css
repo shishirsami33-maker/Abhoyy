@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-latin: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-bangla: 'Hind Siliguri', 'Anek Bangla', 'Noto Sans Bengali', 'SolaimanLipi', sans-serif;
+  --color-ink-900: #0B0B14;
+  --color-ink-700: #1B1B2E;
+  --color-violet-600: #5B2EFF;
+  --color-violet-700: #4520D6;
+  --color-violet-100: #ECE8FF;
+  --color-paper: #F7F6FF;
+  --color-volt-400: #D7FF3F;
+  --color-success-600: #1F9D6B;
+  --color-amber-500: #F59E0B;
+  --color-gray-200: #E4E3F0;
+  --color-gray-600: #5B5B70;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink-900);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  /* Bangla specific typography rules from Part 5:
+     10-15% more line height, no negative letter spacing, no uppercase transforms */
+  html[lang="bn"] body {
+    line-height: 1.65;
+    letter-spacing: normal !important;
+    text-transform: none !important;
+  }
+
+  html[lang="bn"] h1,
+  html[lang="bn"] h2,
+  html[lang="bn"] h3,
+  html[lang="bn"] h4 {
+    letter-spacing: normal !important;
+    line-height: 1.4 !important;
+  }
+}
+
+/* Angular section divider cut */
+.angle-divider-top {
+  clip-path: polygon(0 4vw, 100% 0, 100% 100%, 0 100%);
+}
+
+.angle-divider-bottom {
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 4vw), 0 100%);
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0B0B14;
+}
+::-webkit-scrollbar-thumb {
+  background: #2D2D44;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #5B2EFF;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
